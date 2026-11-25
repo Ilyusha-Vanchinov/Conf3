@@ -1,4 +1,4 @@
-"""CLI-ассемблер УВМ: разбор текста в промежуточное представление."""
+"""CLI-ассемблер УВМ: текст -> промежуточное -> машинное."""
 
 import argparse
 from pathlib import Path
@@ -62,12 +62,24 @@ def parse_file(path: Path) -> list[Instruction]:
     return program
 
 
-def format_instruction(instr: Instruction) -> str:
-    """Форматирует команду для режима --test."""
-    return (
-        f"{instr.opcode.name}: "
-        f"A={instr.a_field}, B={instr.b_field}"
-    )
+def assemble(program: list[Instruction]) -> bytes:
+    """Переводит список инструкций в машинный код."""
+    return b"".join(instr.encode() for instr in program)
+
+
+def format_bytes(data: bytes) -> str:
+    """Форматирует байты как в тестах: 0xE9, 0x73."""
+    return ", ".join(f"0x{byte:02X}" for byte in data)
+
+
+def print_test_output(program: list[Instruction]) -> None:
+    """Печатает результат ассемблирования в формате тестов."""
+    reverse = {opcode: name for name, opcode in MNEMONICS.items()}
+    for instr in program:
+        name = reverse[instr.opcode]
+        fields = f"A={instr.a_field}, B={instr.b_field}"
+        bytes_repr = format_bytes(instr.encode())
+        print(f"{name} {instr.operand} ({fields}): {bytes_repr}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -77,12 +89,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "binary",
         type=Path,
-        help="output .bin (used on stage 2)",
+        help="output .bin (machine code)",
     )
     parser.add_argument(
         "--test",
         action="store_true",
-        help="print intermediate representation",
+        help="print bytes of each instruction",
     )
     return parser
 
@@ -91,12 +103,14 @@ def main(argv: list[str] | None = None) -> int:
     """Точка входа CLI."""
     args = build_parser().parse_args(argv)
     program = parse_file(args.source)
+    machine_code = assemble(program)
+
+    args.binary.write_bytes(machine_code)
+    print(f"Binary size: {len(machine_code)} bytes")
 
     if args.test:
-        for instr in program:
-            print(format_instruction(instr))
+        print_test_output(program)
 
-    # Этап 1: бинарный файл пока не формируется.
     return 0
 
 
